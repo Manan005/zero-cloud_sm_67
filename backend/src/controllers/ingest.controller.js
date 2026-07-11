@@ -162,48 +162,26 @@ export async function searchCodebase(req, res) {
   }
 
   try {
-    let results = [];
-
-    // Defensive SDK search execution
-    if (supermemoryClient.search && typeof supermemoryClient.search.documents === 'function') {
-      const response = await supermemoryClient.search.documents({
+    // Call the local Supermemory /v3/search endpoint directly using the singular containerTag
+    // since the SDK passes containerTags (plural) which is not correctly supported by the local server.
+    const response = await fetch(`${process.env.SUPERMEMORY_BASE_URL || 'http://localhost:8000'}/v3/search`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.SUPERMEMORY_API_KEY || 'local_development_key'}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
         q: query,
-        containerTags: [containerTag],
-      });
-      results = response?.results || [];
-    } else if (supermemoryClient.search && typeof supermemoryClient.search.memories === 'function') {
-      const response = await supermemoryClient.search.memories({
-        q: query,
-        containerTag,
-      });
-      results = response?.results || [];
-    } else if (supermemoryClient.memories && typeof supermemoryClient.memories.search === 'function') {
-      const response = await supermemoryClient.memories.search({
-        q: query,
-        containerTag,
-      });
-      results = response?.results || [];
-    } else {
-      // Raw HTTP fallback if SDK shape is unexpected
-      const response = await fetch(`${process.env.SUPERMEMORY_BASE_URL || 'http://localhost:8000'}/v3/search`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${process.env.SUPERMEMORY_API_KEY || 'local_development_key'}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          q: query,
-          containerTag
-        })
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Fallback HTTP returned status ${response.status}`);
-      }
-      
-      const json = await response.json();
-      results = json?.results || [];
+        containerTag
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Supermemory search returned status ${response.status}`);
     }
+    
+    const json = await response.json();
+    const results = json?.results || [];
 
     // Standardize search return object for the React frontend
     const formattedResults = results.map(item => {
