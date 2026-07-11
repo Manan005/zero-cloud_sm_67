@@ -26,6 +26,30 @@ export async function indexRepository(req, res) {
   }
 
   try {
+    // Clear existing index for this container tag to prevent pollution from previous paths
+    console.log(`Clearing existing index for container tag: ${containerTag}`);
+    try {
+      if (supermemoryClient.documents && typeof supermemoryClient.documents.deleteBulk === 'function') {
+        await supermemoryClient.documents.deleteBulk({
+          containerTags: [containerTag]
+        });
+      } else {
+        await fetch(`${process.env.SUPERMEMORY_BASE_URL || 'http://localhost:8000'}/v3/documents/bulk`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${process.env.SUPERMEMORY_API_KEY || 'local_development_key'}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            containerTags: [containerTag]
+          })
+        });
+      }
+      console.log(`Successfully cleared index for container tag: ${containerTag}`);
+    } catch (clearErr) {
+      console.warn(`Non-blocking warning: failed to clear index for tag ${containerTag}:`, clearErr.message);
+    }
+
     // 1. Crawl filesystem
     console.log(`Starting crawl for directory: ${absolutePath}`);
     const files = await crawlDirectory(absolutePath);
