@@ -1,4 +1,4 @@
-import fs from 'fs';
+import fs from 'fs'; // trigger reload
 import path from 'path';
 import { crawlDirectory } from '../services/crawler.service.js';
 import { chunkFile } from '../services/chunker.service.js';
@@ -46,8 +46,8 @@ export async function indexRepository(req, res) {
     console.log(`Generated ${allChunks.length} chunks from ${files.length} files`);
 
     // 3. Batch upload with rate limiting to avoid choking local memory binary
-    const batchSize = 15;
-    const delayBetweenBatchesMs = 100;
+    const batchSize = 5;
+    const delayBetweenBatchesMs = 250;
     let successfullyIndexed = 0;
 
     // We stream updates to the console or can track progress
@@ -57,7 +57,7 @@ export async function indexRepository(req, res) {
       const uploadPromises = batch.map(async (chunk) => {
         try {
           const payload = {
-            content: `File: ${chunk.metadata.filePath}\nLines: ${chunk.metadata.lineStart}-${chunk.metadata.lineEnd}\n\n${chunk.content}`,
+            content: `### File: ${chunk.metadata.filePath}\nLines: ${chunk.metadata.lineStart}-${chunk.metadata.lineEnd}\n\n${chunk.content}`,
             metadata: {
               filePath: chunk.metadata.filePath,
               language: chunk.metadata.language,
