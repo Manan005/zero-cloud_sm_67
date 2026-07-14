@@ -7,13 +7,23 @@ import supermemoryClient from '../services/memory.service.js';
 // Helper to delay execution between batches
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// Helper to sanitize container tags (must contain only alphanumeric, hyphens, underscores, and colons)
+function sanitizeContainerTag(tag) {
+  if (typeof tag !== 'string') return 'default_repo';
+  // Replace spaces and special characters with underscores
+  const sanitized = tag.trim().replace(/[^a-zA-Z0-9\-_:]/g, '_');
+  return sanitized || 'default_repo';
+}
+
 /**
  * Endpoint to crawl, chunk, and index a codebase.
  * POST /api/index-repo
  * Body: { repoPath: string, containerTag?: string }
  */
 export async function indexRepository(req, res) {
-  const { repoPath, containerTag = 'default_repo' } = req.body;
+  const { repoPath } = req.body;
+  const rawTag = req.body.containerTag || 'default_repo';
+  const containerTag = sanitizeContainerTag(rawTag);
 
   if (!repoPath) {
     return res.status(400).json({ error: 'repoPath is required' });
@@ -155,19 +165,23 @@ export async function indexRepository(req, res) {
  * Body: { query: string, containerTag?: string }
  */
 export async function searchCodebase(req, res) {
-  const { query, containerTag = 'default_repo' } = req.body;
+  const { query } = req.body;
+  const rawTag = req.body.containerTag || 'default_repo';
+  const containerTag = sanitizeContainerTag(rawTag);
 
   if (!query) {
     return res.status(400).json({ error: 'query string is required' });
   }
 
   try {
-    // Call the local Supermemory /v3/search endpoint directly using the singular containerTag
-    // since the SDK passes containerTags (plural) which is not correctly supported by the local server.
-    const response = await fetch(`${process.env.SUPERMEMORY_BASE_URL || 'http://localhost:8000'}/v3/search`, {
+    const baseUrl = process.env.SUPERMEMORY_BASE_URL || 'http://localhost:8000';
+    const apiKey = process.env.SUPERMEMORY_API_KEY || 'local_development_key';
+
+    // 1. Try v4/search (semantic memory search) first, which is the working endpoint for local/self-hosted
+    let response = await fetch(`${baseUrl}/v4/search`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${process.env.SUPERMEMORY_API_KEY || 'local_development_key'}`,
+        'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
@@ -175,20 +189,50 @@ export async function searchCodebase(req, res) {
         containerTag
       })
     });
-    
-    if (!response.ok) {
-      throw new Error(`Supermemory search returned status ${response.status}`);
+
+    let json = await response.json();
+    let results = json?.results || [];
+    let sourceUsed = 'v4';
+
+    // 2. Fall back to v3/search if v4 returns no results or failed
+    if (!response.ok || results.length === 0) {
+      console.log(`v4/search returned 0 results or failed with status ${response.status}. Falling back to v3/search...`);
+      const v3Response = await fetch(`${baseUrl}/v3/search`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          q: query,
+          containerTag
+        })
+      });
+      if (v3Response.ok) {
+        const v3Json = await v3Response.json();
+        results = v3Json?.results || [];
+        sourceUsed = 'v3';
+      }
     }
-    
-    const json = await response.json();
-    const results = json?.results || [];
+
+    console.log(`Semantic search for query "${query}" retrieved ${results.length} results from ${sourceUsed}`);
 
     // Standardize search return object for the React frontend
     const formattedResults = results.map(item => {
-      // Depending on the version, content could be nested under document or directly as memory
-      const content = item.content || item.document?.content || '';
+      // Extract content from v4 (memory/chunk) or v3 (chunks array)
+      let content = '';
+      if (item.memory) {
+        content = item.memory;
+      } else if (item.content) {
+        content = item.content;
+      } else if (item.chunks && item.chunks.length > 0) {
+        content = item.chunks[0].content;
+      } else if (item.document?.content) {
+        content = item.document.content;
+      }
+
       const metadata = item.metadata || item.document?.metadata || {};
-      const score = item.score || item.relevance || 0;
+      const score = item.similarity || item.score || item.relevance || 0;
 
       return {
         content,
