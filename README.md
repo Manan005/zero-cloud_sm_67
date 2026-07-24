@@ -14,14 +14,6 @@ This project was built from scratch for the **Supermemory Local Hackathon** — 
 * **Core Requirement**: 100% local memory processing, embeddings, storage, and semantic search without external cloud dependencies.
 * **Dates**: July 9–13
 
-#### 💰 Prizes
-| Place | Prize |
-| --- | --- |
-| 🥇 **1st Place** | **$500** + $1,000 Supermemory Credits (3 Months) |
-| 🥈 **2nd Place** | **$100** + $1,000 Supermemory Credits (3 Months) |
-| 🥉 **3rd Place** | **$50** + $1,000 Supermemory Credits (3 Months) |
-| ⭐ **People's Choice** | **$50** + $1,000 Supermemory Credits (3 Months) |
-
 ---
 
 ## 💡 What is Zero-Cloud?
